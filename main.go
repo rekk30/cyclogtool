@@ -1,15 +1,14 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"logviewer/cyclogmodel"
+	cyclogmodel "logviewer/CycLogModel"
+	logdog "logviewer/LogDog"
+	"logviewer/loginfo"
+	"logviewer/utils"
 	"os"
-	"path/filepath"
-	"strings"
+	"sort"
 )
 
 // FormatDir logdog format folder
@@ -18,174 +17,64 @@ const FormatDir = "logdogformat"
 // LogFileExt log file pattern
 const LogFileExt = "*.LOG"
 
-func check(e error) {
-	if e != nil {
-		panic(e)
+func writeLogs(logs []loginfo.LogInfo, r io.Writer) int {
+	count := 0
+	for _, log := range logs {
+		timeString := fmt.Sprintf("%02d:%02d:%02d.%d",
+			log.Date.Hour(), log.Date.Minute(),
+			log.Date.Second(), log.Date.Nanosecond())
+		logIDString := fmt.Sprintf("[0x%04x] ", log.LogID)
+
+		io.WriteString(r, timeString+" ")
+		io.WriteString(r, log.Source+" ")
+		io.WriteString(r, logIDString)
+		io.WriteString(r, log.Text)
+		io.WriteString(r, "\n")
+
+		count++
 	}
-}
 
-func untar(dst string, r io.Reader) error {
-
-	gzr, err := gzip.NewReader(r)
-	if err != nil {
-		return err
-	}
-	defer gzr.Close()
-
-	tr := tar.NewReader(gzr)
-
-	for {
-		header, err := tr.Next()
-
-		switch {
-
-		// if no more files are found return
-		case err == io.EOF:
-			return nil
-
-		// return any other error
-		case err != nil:
-			return err
-
-		// if the header is nil, just skip it (not sure how this happens)
-		case header == nil:
-			continue
-		}
-
-		// the target location where the dir/file should be created
-		target := filepath.Join(dst, header.Name)
-
-		// the following switch could also be done using fi.Mode(), not sure if there
-		// a benefit of using one vs. the other.
-		// fi := header.FileInfo()
-
-		// check the file type
-		switch header.Typeflag {
-
-		// if its a dir and it doesn't exist create it
-		case tar.TypeDir:
-			if _, err := os.Stat(target); err != nil {
-				if err := os.MkdirAll(target, 0755); err != nil {
-					return err
-				}
-			}
-
-		// if it's a file create it
-		case tar.TypeReg:
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
-			if err != nil {
-				return err
-			}
-
-			// copy over contents
-			if _, err := io.Copy(f, tr); err != nil {
-				return err
-			}
-
-			// manually close here after each file operation; defering would cause each file close
-			// to wait until all operations have completed.
-			f.Close()
-		}
-	}
-}
-
-func getFiles(src string, pattern string) []string {
-	var files []string
-
-	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if matched, err := filepath.Match(pattern, filepath.Base(path)); err != nil {
-			return err
-		} else if matched {
-			files = append(files, path)
-		}
-		return nil
-	})
-	check(err)
-
-	return files
-}
-
-// LogInfo parsed log struct
-type LogInfo struct {
-	source   int
-	fullText string
-	pid      int
-	tid      int
-	logLevel string
-	procName string
-	text     string
-}
-
-// IParser logfile parser interface
-type IParser interface {
-	Parse(string) LogInfo
-	ParseLogTime(string, map[uint]cyclogmodel.FormatMsg) LogInfo
-}
-
-// LogDogParser parser for logdog format
-type LogDogParser struct {
-	model *cyclogmodel.CycLogModel
-}
-
-func makeLogDogParser(m *cyclogmodel.CycLogModel) IParser {
-	return LogDogParser{m}
-}
-
-// Parse LogDogParser parsing function
-func (b LogDogParser) Parse(filename string) LogInfo {
-	_, err := ioutil.ReadFile(filename)
-	check(err)
-
-	// b.model.CycLogReadFile(filename)
-
-	return LogInfo{}
-}
-
-// ParseLogTime parse logtime.dat file
-func (b LogDogParser) ParseLogTime(filename string, format map[uint]cyclogmodel.FormatMsg) LogInfo {
-	file, err := os.Open(filename)
-	check(err)
-	defer file.Close()
-
-	b.model.CycLogReadLogTime(file, format)
-
-	return LogInfo{}
+	return count
 }
 
 func main() {
 	if len(os.Args) < 2 {
 		panic("Specify log archive")
 	}
+
 	file, err := os.Open(os.Args[1])
-	check(err)
+	utils.Check(err)
+	defer file.Close()
 	logFolder := file.Name() + ".ext"
 
-	untar(logFolder, file)
+	var outputFile *os.File
+	outputFile, err = os.Create("logs.txt")
+	utils.Check(err)
+	defer outputFile.Close()
 
-	// timeLogFile := getFiles(logFolder, "LOGTIME.DAT")
-	// if len(timeLogFile) < 1 {
-	// 	panic("LOGTIME.DAT not find")
-	// }
+	utils.Untar(logFolder, file)
 
 	model := cyclogmodel.MakeCycLogModel()
-	parser := makeLogDogParser(&model)
+	parser := logdog.MakeLogDogParser(&model)
 
-	// timeLog := parser.ParseLogTime(timeLogFile[0])
+	files := utils.GetFiles(logFolder, LogFileExt)
 
-	// fmt.Println(timeLog)
-
-	files := getFiles(logFolder, LogFileExt)
+	var logs []loginfo.LogInfo
 
 	for _, file := range files {
-		parts := strings.Split(file, string(os.PathSeparator))
-		filename := parts[len(parts)-1]
+		filename := utils.ExtractFilename(file)
 
-		parts2 := strings.Split(filename, ".")
-
-		format := cyclogmodel.ReadFormatData(FormatDir + "/" + parts2[0] + ".csv")
+		format := cyclogmodel.ReadFormatData(FormatDir + "/" + filename + ".csv")
 		fmt.Println(len(format))
 		fmt.Println("Processing " + filename)
-		parser.ParseLogTime(file, format)
+
+		logs = append(logs, parser.Parse(file, format)...)
 	}
-	// fmt.Scanln()
+
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].Date.Before(logs[j].Date)
+	})
+
+	logsWritten := writeLogs(logs, outputFile)
+	fmt.Printf("Written %d logs\n", logsWritten)
 }
