@@ -1,7 +1,7 @@
 package loginfo
 
 import (
-	cyclogmodel "logviewer/CycLogModel"
+	"logviewer/cyclogmodel"
 	"time"
 )
 

@@ -1,11 +1,12 @@
 package logdog
 
 import (
-	"fmt"
-	cyclogmodel "logviewer/CycLogModel"
+	"logviewer/cyclogmodel"
 	"logviewer/loginfo"
 	"logviewer/utils"
 	"os"
+	"regexp"
+	"strings"
 )
 
 // Parser parser for logdog format
@@ -20,12 +21,12 @@ func MakeLogDogParser(m *cyclogmodel.CycLogModel) loginfo.IParser {
 
 // Format Parser format messages
 func (b Parser) Format(rawMsg cyclogmodel.CycLogMsg) string {
-	var params string
+	str := rawMsg.Str
+	re := regexp.MustCompile(`%.?`)
 	for _, param := range rawMsg.Child {
-		params += param.Value() + " "
-		// fmt.Println(param.Value)
+		str = strings.Replace(str, re.FindString(str), param.Value(), 1)
 	}
-	return fmt.Sprint(rawMsg.Str + "| " + params)
+	return str
 }
 
 // Parse Parser parsing function

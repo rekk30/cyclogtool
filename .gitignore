@@ -2,3 +2,7 @@
 *ext/
 logdogformat/
 logs.txt
+*.pem
+*.enc
+*.log
+main

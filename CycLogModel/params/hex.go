@@ -3,7 +3,6 @@ package params
 import (
 	"fmt"
 	"logviewer/utils"
-	"strconv"
 )
 
 // HexParam hex parameter
@@ -26,13 +25,13 @@ func (p *HexParam) Build(data []byte, size int, name string) int {
 
 	switch size {
 	case 1:
-		p.value = strconv.Itoa(int(data[0]))
+		p.value = fmt.Sprintf("0x%X", int(data[0]))
 	case 2:
-		p.value = strconv.Itoa(int(utils.ReadUInt16(data)))
+		p.value = fmt.Sprintf("0x%X", int(utils.ReadUInt16(data)))
 	case 4:
-		p.value = strconv.Itoa(int(utils.ReadUInt32(data)))
+		p.value = fmt.Sprintf("0x%X", int(utils.ReadUInt32(data)))
 	case 8:
-		p.value = strconv.Itoa(int(utils.ReadUInt64(data)))
+		p.value = fmt.Sprintf("0x%X", int(utils.ReadUInt64(data)))
 	default:
 		p.value = fmt.Sprintf("[Hex %d bytes param not implemented]", size)
 	}

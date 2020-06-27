@@ -1,0 +1,14 @@
+{
+  "use_temp": true,
+  "format": "%h:%m:%s.%n %x %i %t",
+  "target": {
+    "logdog_format": "logdogformat",
+    "logdog": [
+      "NRVC_SRV"
+    ]
+  },
+  "key": {
+    "installed": "privatekey2048_GL.pem",
+    "factory": "logenc_factorykey.pem"
+  }
+}

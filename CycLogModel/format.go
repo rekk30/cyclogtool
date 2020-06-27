@@ -22,7 +22,7 @@ type FormatMsgParam struct {
 }
 
 // ReadFormatData read format data from *.csv
-func ReadFormatData(filename string) (dicFormatMsg map[uint]FormatMsg) {
+func ReadFormatData(filename string) (dicFormatMsg map[uint]FormatMsg, err error) {
 	dicFormatMsg = make(map[uint]FormatMsg)
 	for index := uint(4294967280); index < uint(4294967285); index++ {
 		dicFormatMsg[index] = FormatMsg{}
@@ -36,25 +36,29 @@ func ReadFormatData(filename string) (dicFormatMsg map[uint]FormatMsg) {
 	defer file.Close()
 
 	lines, err := csv.NewReader(file).ReadAll()
-	fmt.Println("Size = ", len(lines))
-	Check(err)
 
 	for i := 0; i < len(lines); i++ {
-		logID, err := strconv.ParseUint(lines[i][0], 10, 64)
-		Check(err)
+		logID, _ := strconv.ParseUint(lines[i][0], 10, 64)
+		// if err == nil {
+		// 	continue
+		// }
 
-		paramCount, err := strconv.ParseInt(lines[i][2], 10, 64)
-		Check(err)
+		paramCount, _ := strconv.ParseInt(lines[i][2], 10, 64)
+		// if err == nil {
+		// 	continue
+		// }
 
 		var msg = FormatMsg{
 			comment: lines[i][1],
 		}
 
 		for p := 1; p <= int(paramCount); p++ {
-			size, err := strconv.ParseInt(lines[i+p][0], 10, 64)
-			Check(err)
+			size, _ := strconv.ParseInt(lines[i+p][0], 10, 64)
+			// if err == nil {
+			// 	continue
+			// }
 
-			style, err := strconv.ParseInt(lines[i+p][2], 10, 64)
+			style, _ := strconv.ParseInt(lines[i+p][2], 10, 64)
 
 			var childMsg = FormatMsgParam{
 				size:  int(size),
@@ -102,21 +106,17 @@ func ParseMsg(logID uint, data []byte, format map[uint]FormatMsg) (msg CycLogMsg
 			param = new(params.StringParam)
 		case params.Float:
 			param = new(params.FloatParam)
-		default:
-			fmt.Printf("Param style %d not implemented\n", child.style)
 		}
 
-		if param == nil {
-			fmt.Println("nil")
+		read := 0
+		if param != nil {
+			read = param.Build(data[pos:], child.size, child.name)
+			msg.Child = append(msg.Child, param)
 		}
-
-		read := param.Build(data[pos:], child.size, child.name)
-		fmt.Println("Param name = ", param.Name(), " Param value = ", param.Value())
 
 		pos += read
 		size -= read
 
-		msg.Child = append(msg.Child, param)
 	}
 
 	return
